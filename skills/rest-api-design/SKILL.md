@@ -17,11 +17,11 @@ This standard defines how REST APIs should be designed for consistency, predicta
 | POST   | No   | No ¹       | Yes          | Yes           | Creates a resource, triggers action                                                 |
 | PUT    | No   | Yes        | Yes          | Yes ³         | Full replace of resource (field: absent→nulled, null→nulled, array→replaced)        |
 | PATCH  | No   | No ²       | Yes          | Yes ³         | Partially updates a resource (field: absent→untouched, null→nulled, array→replaced) |
-| DELETE | No   | Yes        | No           | No ³          | Removes a resource                                                                  |
+| DELETE | No   | Yes        | No           | No            | Removes a resource                                                                  |
 
-- ¹ - POST can be made idempotent by accepting an `Idempotency-Key: <uuid-v7>` header. The server stores the result keyed by that value and returns the cached response for any repeated request with the same key. Use for operations where duplicate execution would cause harm (e.g., payments, order submission).
+- ¹ - POST can be made idempotent by accepting an `Idempotency-Key: <key>` header. The server stores the result keyed by that value and returns the cached response for any repeated request with the same key. Use for operations where duplicate execution would cause harm (e.g., payments, order submission).
 - ² - PATCH idempotent when value-based (e.g., `{"name": "Alice"}`), not idempotent when operation-based (e.g., `{"op": "increment", "field": "count"}`). Array replacement may be overridden per endpoint if granular merge is needed.
-- ³ - Response body is optional. The value shown is the recommended default.
+- ³ - Response body for PUT and PATCH is optional — returning it is the recommended default, it helps avoid an extra GET round-trip
 
 ## Path Structure
 
@@ -41,7 +41,7 @@ Nested paths express ownership, not identity. Use the full path (`/orders/{order
    - Adding new optional request fields or query parameters
    - Adding new fields to a response
    - Relaxing validation
-3. Breaking changes → requires a new version:
+3. Breaking changes → requires a new version (affected endpoint only)
    - Removing or renaming fields
    - Changing a field type
    - Tightening validation
@@ -55,11 +55,13 @@ Nested paths express ownership, not identity. Use the full path (`/orders/{order
    - Return 410 Gone from the old version after the sunset date has passed
 
 ## Naming Conventions
-- **Path segments** use **kebab-case** and **plural nouns**: `/api/v1/orders`, `/api/v1/gift-cards`
-- **Path parameters** use **camelCase**: `/api/v1/orders/{orderId}`, `/api/v1/gift-cards/{cardId}`
-- **Action** use **kebab-case**: `POST /api/v1/orders:search`, `POST /api/v1/orders/{id}:reset-tracker` — the colon distinguishes a verb from a sub-resource path segment
-- **Query params** use **camelCase**: `?pageSize=20&sortOrder=desc&createdAfter=2024-01-01`
-- **JSON body fields** (request and response) use **camelCase**: `{ "orderId": "123", "createdAt": "..." }`
+- **Path segment** uses **kebab-case** and **plural nouns**: `/api/v1/orders`, `/api/v1/gift-cards`
+- **Path parameter** uses **camelCase**: `/api/v1/orders/{orderId}`, `/api/v1/gift-cards/{cardId}`
+- **Action** uses **kebab-case**: `POST /api/v1/orders:search`, `POST /api/v1/orders/{id}:reset-tracker` — the colon distinguishes a verb from a sub-resource path segment
+- **Query parameter** uses **camelCase**: `?pageSize=20&sortOrder=desc&createdAfter=2024-01-01`
+- **JSON body field** (request and response) uses **camelCase**: `{ "orderId": "123", "createdAt": "..." }`
+  - **Be self-descriptive** — spell out words unless the abbreviation is more universally recognized than the full term. `quantity` not `qty`, `message` not `msg`, `employeeId` not `empId`. Acceptable: universally known shorthands (`id`, `ssn`, `iban`, `pin`) or domain-standard abbreviations (`npi` in healthcare).
+  - **Be consistent** — once a field name is established in any endpoint or service, use it everywhere. `dateOfBirth` everywhere — not `dob`, `birthDate`, or `birthday` in other endpoints or services.
 
 ## Examples
 ```
@@ -121,8 +123,8 @@ Search and list endpoints always return `200` with an empty array — never `404
 ## Response Structure
 
 Responses may include the following top-level fields:
-- `data`: single resource object or array of resources — always present on `2xx` responses
-- `meta`: contextual information (e.g., pagination); omit on single-resource responses unless needed
+- `data`: single resource object or array of resources — always present on `2xx` responses with a body
+- `meta`: contextual information (e.g., pagination); omit on single-resource responses by default
 - `links`: reserved for HATEOAS; do not include it unless explicitly requested
 - `error`: structured error info — always present on `4xx`/`5xx` responses
 
@@ -157,7 +159,7 @@ Responses may include the following top-level fields:
 }
 ```
 
-- `code`: machine-readable constant in `SCREAMING_SNAKE_CASE`, following `{SUBJECT}_{CAUSE}` where cause is typically a past-tense verb (e.g., `ORDER_NOT_FOUND`, `VALIDATION_FAILED`, `PAYMENT_DECLINED`, `VERSION_MISMATCH`). Be specific to the domain — avoid generic HTTP status names.
+- `code`: machine-readable constant in `SCREAMING_SNAKE_CASE`, following `{SUBJECT}_{CAUSE}` where cause is typically a past-tense verb or descriptive noun (e.g., `ORDER_NOT_FOUND`, `VALIDATION_FAILED`, `PAYMENT_DECLINED`, `VERSION_MISMATCH`). Be specific to the domain — avoid generic HTTP status names.
 - `message`: human-readable explanation
 - `details`: optional array for field-level errors (e.g., `VALIDATION_FAILED`). Omit when `code` + `message` are sufficient (e.g., `ORDER_NOT_FOUND`).
 
@@ -192,8 +194,9 @@ Notes:
 - **Sorting**: `?sort=createdAt` (default order is `asc`), `?sort=status:desc,createdAt:asc` for multi-field with an explicit direction
 - **Pagination**: `?cursor=abc123&limit=20`, `?offset=40&limit=20`, `?page=2&limit=20` (see Pagination)
 - **Limiting output size**: `?limit=20` controls how many results are returned
+- **Output shaping**: `?fields[orders]=id,status&include=items` (see Partial Responses)
 
-Keep query params flat and simple. Use `POST :search` when queries involve complex filter types (in, like, range), arrays of values, special characters, or the query string would exceed ~1000 characters.
+Prefer flat, simple query params. Use `POST :search` when queries involve complex filter types (in, like, range), arrays of values, special characters, or the query string would exceed ~1000 characters. Use `fields[]` bracket notation only when implementing sparse fieldsets (see Partial Responses).
 
 ## Pagination
 
@@ -240,11 +243,11 @@ Keep query params flat and simple. Use `POST :search` when queries involve compl
 
 ## Authentication
 
-| Mechanism    | Header                                   | Protocol / Token | When to use                                                                                    |
-|--------------|------------------------------------------|------------------|------------------------------------------------------------------------------------------------|
-| Bearer token | `Authorization: Bearer <token>`          | OAuth 2.0 + JWT  | When you have an IdP (user-facing or service-to-service with OAuth)                            |
-| API key      | `X-API-Key: <key>`                       | Shared secret    | When you don't have an IdP, or the caller can't implement OAuth                                |
-| Signature    | `X-Signature:  keyId=...,sig=...,ts=...` | HMAC-SHA256      | Inbound webhooks from third parties, or when you need tamper + replay protection on top of TLS |
+| Mechanism    | Header                                  | Protocol / Token | When to use                                                                                    |
+|--------------|-----------------------------------------|------------------|------------------------------------------------------------------------------------------------|
+| Bearer token | `Authorization: Bearer <token>`         | OAuth 2.0 + JWT  | When you have an IdP (user-facing or service-to-service with OAuth)                            |
+| API key      | `X-API-Key: <key>`                      | Shared secret    | When you don't have an IdP, or the caller can't implement OAuth                                |
+| Signature    | `X-Signature: keyId=...,sig=...,ts=...` | HMAC-SHA256      | Inbound webhooks from third parties, or when you need tamper + replay protection on top of TLS |
 
 - **JWT**: verify `iss`, `aud`, `exp`, and required scopes using the IdP's JWKS endpoint — no round-trip to the auth server needed.
 - **OAuth 2.0 flows**: use Authorization Code + PKCE for user-facing apps, Client Credentials for service-to-service.
