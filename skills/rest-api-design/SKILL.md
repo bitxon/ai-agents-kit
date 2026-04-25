@@ -1,6 +1,6 @@
 ---
 name: rest-api-design
-description: REST API design standards and guidelines. Use this skill whenever you are helping design a REST API, creating new REST endpoints in code, naming resources, choosing HTTP methods, structuring API responses, implementing pagination, designing error responses, picking status codes, planning API versioning, or deciding how to model a new route. Invoke proactively when the user mentions endpoints, routes, controllers, API design, HTTP methods, status codes, pagination, request/response format, API versioning, or asks how to structure any part of an HTTP API - even if they don't use the word "REST".
+description: "REST API design standards and guidelines. Use this skill whenever you are helping design a REST API, creating new REST endpoints in code, naming resources, choosing HTTP methods, structuring API responses, implementing pagination, designing error responses, picking status codes, planning API versioning, or deciding how to model a new route. Invoke proactively when the user mentions endpoints, routes, controllers, API design, HTTP methods, status codes, pagination, request/response format, API versioning, or asks how to structure any part of an HTTP API - even if they don't use the word 'REST'."
 ---
 
 # REST API Design Standard
