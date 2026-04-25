@@ -3,7 +3,7 @@ name: jvm-spring-scaffold
 description: "Scaffolds a new Kotlin or Java Spring Boot project. Use when the user wants to create, bootstrap, initialize, or start a Spring Boot project, microservice, REST API, or JVM backend service — including vague requests like 'set up a Spring app', 'create a Spring project', or 'start a new Kotlin/Java service'. Also the default for any generic JVM backend request where no framework is specified. Do NOT use if the user mentions Dropwizard, Quarkus, Ktor, Helidon, or Micronaut."
 ---
 
-# JVM Spring Boot Scaffold
+# Spring Boot Scaffold
 
 This skill creates a working Spring Boot project using Spring Initializr `https://start.spring.io`, unzips it, and verifies the build compiles cleanly.
 
@@ -147,13 +147,13 @@ ls -la .
 
 ## Step 6 — Build and verify
 
-**Subproject mode** — cd into the subfolder first:
-- Gradle: `cd "$BASE_DIR" && chmod +x gradlew && ./gradlew build --no-daemon -x test 2>&1 | tail -50`
-- Maven: `cd "$BASE_DIR" && chmod +x mvnw && ./mvnw verify -DskipTests 2>&1 | tail -50`
+**Subproject mode** — use a subshell so the working directory is not changed for subsequent commands:
+- Gradle: `(cd "$BASE_DIR" && chmod +x gradlew && ./gradlew build --no-daemon -x test 2>&1 | tail -30)`
+- Maven: `(cd "$BASE_DIR" && chmod +x mvnw && ./mvnw verify -DskipTests --no-transfer-progress 2>&1 | tail -30)`
 
 **Root mode** — run directly from the current directory:
-- Gradle: `chmod +x gradlew && ./gradlew build --no-daemon -x test 2>&1 | tail -50`
-- Maven: `chmod +x mvnw && ./mvnw verify -DskipTests 2>&1 | tail -50`
+- Gradle: `chmod +x gradlew && ./gradlew build --no-daemon -x test 2>&1 | tail -30`
+- Maven: `chmod +x mvnw && ./mvnw verify -DskipTests --no-transfer-progress 2>&1 | tail -30`
 
 A successful build ends with `BUILD SUCCESSFUL` (Gradle) or `BUILD SUCCESS` (Maven). If the build fails, diagnose from the output
 
