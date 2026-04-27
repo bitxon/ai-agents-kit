@@ -18,15 +18,24 @@ Decide where the project files should land **before** doing anything else. Ask i
 
 Before proceeding, check if the target directory already contains a project (look for `build.gradle.kts`, `build.gradle`, `pom.xml`, `gradlew`, or `mvnw`). If found, warn the user and ask for confirmation before continuing.
 
-## Step 2 — Fetch start.spring.io metadata
+## Step 2 — Determine artifact identifiers
+
+- **artifactId** — project / service name, lowercase-hyphenated (`demo-service`).
+  Derive from task context. If not determinable, ask the user.
+- **groupId** — company domain in reverse notation (`com.example`).
+  Derive only from what the user explicitly stated in the prompt (e.g. "use com.acme", "for Acme Corp", "domain is acme.com"). Do **not** infer from email addresses, session info, git config, or any other implicit source. If not explicitly provided, ask the user.
+
+`packageName` = `groupId` (reversed domain only, nothing appended).
+
+## Step 3 — Fetch start.spring.io metadata
 
 WebFetch `https://start.spring.io/metadata/client` and extract:
 - **Latest stable Spring Boot version**: first entry in `bootVersion.values` whose `id` does not contain `SNAPSHOT`, `RC`, or `M` (milestone). Normalize version (Remove `.RELEASE`) `4.0.6.RELEASE` becomes `4.0.6`
 - **Supported Java versions**: full list of `id` values from `javaVersion.values`
 
-If the fetch fails, proceed — Step 3 handles the fallback.
+If the fetch fails, proceed — Step 4 handles the fallback.
 
-## Step 3 — Determine the tech stack
+## Step 4 — Determine the tech stack
 
 Before generating anything, infer the right choices from the task context. Ask if the user hasn't been clear.
 
@@ -57,7 +66,7 @@ Before generating anything, infer the right choices from the task context. Ask i
 
 | Metadata available | User specified | Action |
 |---|---|---|
-| yes | no | use the latest stable version extracted in Step 2 |
+| yes | no | use the latest stable version extracted in Step 3 |
 | yes | yes | use user's value |
 | no | no | fall back to `4.0.6` |
 | no | yes | trust user; note at end that version was not validated |
@@ -96,25 +105,22 @@ Map the task description to starter IDs. Common mappings:
 
 For Kotlin projects, **do not** add `lombok` — Kotlin data classes replace it.
 
-## Step 4 — Build the curl command and download
+## Step 5 — Build the curl command and download
 
-Construct the parameters from Step 3, then download `starter.zip`.
+Construct the parameters from Steps 2 and 4, then download `starter.zip`.
 - `baseDir`: depends on placement mode:
   - **Subproject mode**: include `baseDir` — the zip will unpack into a named subfolder.
   - **Root mode**: omit `baseDir` entirely — the zip extracts files directly at the root level, no wrapping folder.
-- `groupId`: derive from task context (company name), use reverse-domain notation (e.g. `com.example`).
-- `artifactId`: derive from task context (service name). Keep artifactId lowercase-hyphenated (`demo-service`).
-- `packageName`: derived from groupId + artifactId, dots only, no hyphens. Strip common redundant suffixes (`-service`, `-application`, `-app`) from the artifactId first, then collapse remaining hyphens — `demo-service` → `com.example.demo`, `user-auth-service` → `com.example.userauth`, `payment-app` → `com.example.payment`.
 
 ```bash
 TYPE="gradle-project-kotlin"            # or maven-project, gradle-project
 LANGUAGE="kotlin"                       # or java
 BOOT_VERSION="4.0.6"
 JAVA_VERSION="21"
-GROUP_ID="com.example"
-ARTIFACT_ID="demo-service"
-BASE_DIR="demo-service"                 # subproject mode only; omit variable and -d line below for root mode
-PACKAGE_NAME="com.example.demo"
+GROUP_ID="com.example"                  # from Step 2
+ARTIFACT_ID="demo-service"              # from Step 2
+BASE_DIR="demo-service"                 # subproject mode only; omit this variable and the -d baseDir line for root mode
+PACKAGE_NAME="com.example"              # from Step 2 (= GROUP_ID)
 DEPENDENCIES="web,actuator,validation"
 
 curl -s "https://start.spring.io/starter.zip" \
@@ -135,7 +141,7 @@ curl -s "https://start.spring.io/starter.zip" \
 Verify the download succeeded using shell: `file "${ARTIFACT_ID}.zip"` (the file should be a zip, not an error page).
 If `file` reports it as HTML or ASCII, print the file content — the API returned an error. Fix the parameters and retry.
 
-## Step 5 — Unzip
+## Step 6 — Unzip
 
 Both modes use the same commands — the zip structure already matches the target layout.
 
@@ -145,7 +151,7 @@ rm "${ARTIFACT_ID}.zip"
 ls -la .
 ```
 
-## Step 6 — Build and verify
+## Step 7 — Build and verify
 
 **Subproject mode** — use a subshell so the working directory is not changed for subsequent commands:
 - Gradle: `(cd "$BASE_DIR" && chmod +x gradlew && ./gradlew build --no-daemon -x test 2>&1 | tail -30)`
@@ -157,11 +163,12 @@ ls -la .
 
 A successful build ends with `BUILD SUCCESSFUL` (Gradle) or `BUILD SUCCESS` (Maven). If the build fails, diagnose from the output
 
-## Step 7 — Tell the user what was created
+## Step 8 — Tell the user what was created
 
 After a clean build, report in short form:
 - Project location (absolute path)
 - Language, Spring Boot version and build tool used
 - Dependencies included
+- groupId, artifactId, and package used
 - How to run: `./gradlew bootRun` or `./mvnw spring-boot:run`
 - If start.spring.io metadata was unavailable and the user provided versions, note that those were used as-is without validation against the current supported versions list.
