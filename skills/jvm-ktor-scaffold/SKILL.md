@@ -18,7 +18,16 @@ Decide where the project files should land **before** doing anything else. Ask i
 
 Before proceeding, check if the target directory already contains a project (look for `build.gradle.kts`, `build.gradle`, `pom.xml`, `gradlew`, or `mvnw`). If found, warn the user and ask for confirmation before continuing.
 
-## Step 2 — Fetch start.ktor.io metadata
+## Step 2 — Determine artifact identifiers
+
+- **artifactId** — project / service name, lowercase-hyphenated (`demo-service`).
+  Derive from task context. If not determinable, ask the user.
+- **groupId** — company domain in reverse notation (`com.example`).
+  Derive only from what the user explicitly stated in the prompt (e.g. "use com.acme", "for Acme Corp", "domain is acme.com"). Do **not** infer from email addresses, session info, git config, or any other implicit source. If not explicitly provided, ask the user.
+
+`packageName` = `groupId` (reversed domain only, nothing appended).
+
+## Step 3 — Fetch start.ktor.io metadata
 
 Make two requests:
 
@@ -35,9 +44,9 @@ Extract:
 
 Each item has `xmlId` (used as the plugin ID in the generate request), `name`, `group`, and `requiredFeatures`.
 
-If the fetches fail, proceed — Step 3 handles the fallback.
+If the fetches fail, proceed — Step 4 handles the fallback.
 
-## Step 3 — Determine the tech stack
+## Step 4 — Determine the tech stack
 
 Before generating anything, infer the right choices from the task context. Ask if the user hasn't been clear.
 
@@ -86,7 +95,7 @@ Before generating anything, infer the right choices from the task context. Ask i
 
 Map the task description to plugin `xmlId` values. Include required dependencies automatically (check `requiredFeatures`).
 
-After selecting plugins from the table, verify each `xmlId` exists verbatim in the features JSON fetched in Step 2. The table is a guide for intent mapping — the fetched JSON is the source of truth for spelling. If a selected `xmlId` is not found in the fetched list, flag it to the user before proceeding.
+After selecting plugins from the table, verify each `xmlId` exists verbatim in the features JSON fetched in Step 3. The table is a guide for intent mapping — the fetched JSON is the source of truth for spelling. If a selected `xmlId` is not found in the fetched list, flag it to the user before proceeding.
 
 | Task / technology mentioned | Plugin xmlId(s) |
 |---|---|
@@ -130,24 +139,22 @@ After selecting plugins from the table, verify each `xmlId` exists verbatim in t
 | gRPC | `org.jetbrains/kotlinx-rpc-grpc` |
 | Rate limiting | `io.github.flaxoos/server-rate-limiting` |
 
-## Step 4 — Derive project name and package
-
-- `project_name`: derive from task context (service name). Keep it lowercase-hyphenated (`demo-service`).
-- `company_website`: derive from task context (company name) in reverse-domain notation (`example.com`). Use `example.com` if unspecified.
-- Package name is derived server-side; no need to pass it separately.
-
 ## Step 5 — Build the curl command and download
 
 The API accepts a JSON POST body. The response is a zip file with **no wrapping folder** — files unzip directly into the current directory.
 
+Translate artifact identifiers from Step 2 to Ktor API fields:
+- `artifactId` → `project_name`
+- `groupId` (`com.example`) → `company_website` (reversed: `example.com`)
+
 ```bash
-PROJECT_NAME="demo-service"
+PROJECT_NAME="demo-service"       # artifactId from Step 2
 KTOR_VERSION="3.4.2"
 KOTLIN_VERSION="2.3.20"
 ENGINE="NETTY"                    # NETTY | JETTY | CIO | TOMCAT
 BUILD_SYSTEM="GRADLE_KTS"         # GRADLE_KTS | MAVEN | AMPER
 CONFIG_OPTION="YAML"              # YAML | HOCON | CODE
-COMPANY_WEBSITE="example.com"
+COMPANY_WEBSITE="example.com"     # groupId reversed from Step 2
 # Features: space-separated list of xmlId values to include in the JSON array
 FEATURES='"io.ktor/server-content-negotiation","io.ktor/server-kotlinx-serialization","io.ktor/server-cors"'
 
@@ -199,6 +206,7 @@ After a clean build, report in short form:
 - Project location (absolute path)
 - Ktor version, Kotlin version, build system, and engine used
 - Plugins included
+- groupId, artifactId, and generated package used
 - How to run: `./gradlew run` (Gradle) or `./mvnw ktor:run` (Maven)
 - Configuration format (YAML / HOCON / Code)
 - If metadata was unavailable and the user provided versions, note that those were used as-is without validation.
